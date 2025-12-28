@@ -1,34 +1,39 @@
-\# CNC IIoT Project
+# CNC IIoT Backend (GRBL Telemetry + Job Tracking)
 
+A simulation-driven **Industrial IoT backend** for a CNC laser engraver running **GRBL**.  
+This project ingests GRBL-like telemetry logs, decodes machine state, stores telemetry/events in **SQLite**, tracks the **job lifecycle**, and generates reports + CSV exports.
 
+> Current status: Backend demo pipeline works (simulation).  
+> Next milestones: README polish + screenshots → dashboard → real-time GRBL serial connection.
 
-This project is a simulation-based Industrial IoT backend for a CNC laser engraver using GRBL.
+---
 
+## What it does
+- Ingests GRBL-style telemetry logs (simulation)
+- Decodes status messages (state + position, etc.)
+- Stores **telemetry** and **events** in SQLite
+- Tracks job lifecycle: **created → started → finished**
+- Auto-finalises jobs based on telemetry timestamps
+- Generates a **job summary report**
+- Exports CSV files for reporting
 
+---
 
-\## What it does
+## Repo contents (main scripts)
+- `demo_run.ps1` — one-command demo run
+- `log_to_db.py` — telemetry ingestion + DB logging
+- `read_grbl_log.py` — reads/parses GRBL log input
+- `migrate_schema*.py` — DB schema setup/migrations
+- `job_report.py` / `export_job_report.py` — reporting + CSV exports
+- `dashboard/` and `dashboard_app.py` — dashboard work-in-progress
 
-\- Reads GRBL-style telemetry logs
+---
 
-\- Decodes machine status
-
-\- Stores telemetry and events in SQLite
-
-\- Tracks job lifecycle (created → started → finished)
-
-\- Auto-finalises jobs
-
-\- Generates job summary reports
-
-\- Exports CSV files
-
-
-
-\## How to run
-
+## Quick start (Windows)
+### 1) Create a virtual environment
 ```powershell
-
-.\\demo\_run.ps1
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
 
 
 
