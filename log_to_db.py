@@ -7,7 +7,6 @@ DB_PATH = Path("cnc_iiot.db")
 
 
 def now_utc_iso() -> str:
-    # ISO8601 with timezone, seconds precision
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
@@ -28,11 +27,6 @@ def get_active_job_id(conn: sqlite3.Connection) -> int | None:
 
 
 def init_db(conn: sqlite3.Connection) -> None:
-    """
-    DB is already migrated to v1 (telemetry/events/jobs exist).
-    Do NOT recreate telemetry/events here.
-    Only ensure app_state exists.
-    """
     ensure_app_state(conn)
 
 
@@ -46,11 +40,9 @@ def log_event(
     code: str | None = None,
     meta_json: str | None = None,
 ) -> None:
-    ts = datetime.now().isoformat(timespec="seconds")  # legacy local timestamp
+    ts = datetime.now().isoformat(timespec="seconds")
     ts_utc = now_utc_iso()
     job_id = get_active_job_id(conn)
-
-    # events.raw is NOT NULL in your schema
     raw = raw if raw is not None else ""
 
     conn.execute(
@@ -72,7 +64,7 @@ def log_telemetry(
     spindle: int,
     raw: str,
 ) -> None:
-    ts = datetime.now().isoformat(timespec="seconds")  # legacy local timestamp
+    ts = datetime.now().isoformat(timespec="seconds")
     ts_utc = now_utc_iso()
     job_id = get_active_job_id(conn)
 
@@ -96,10 +88,6 @@ def log_telemetry(
 
 
 def finalize_job_from_telemetry(conn: sqlite3.Connection, job_id: int) -> None:
-    """
-    Auto-set job started/finished timestamps using telemetry MIN/MAX(ts_utc),
-    and mark status as finished (if it was created/running/paused).
-    """
     row = conn.execute("""
         SELECT MIN(ts_utc), MAX(ts_utc), COUNT(*)
         FROM telemetry
@@ -125,7 +113,6 @@ def finalize_job_from_telemetry(conn: sqlite3.Connection, job_id: int) -> None:
         WHERE id=?
     """, (t_start, t_end, job_id))
 
-    # Log a job event (raw must be non-null)
     ts_local = datetime.now().isoformat(timespec="seconds")
     ts_utc = now_utc_iso()
     conn.execute("""
@@ -141,7 +128,6 @@ def finalize_job_from_telemetry(conn: sqlite3.Connection, job_id: int) -> None:
 
 
 def parse_status(line: str):
-    # line like: <Run|MPos:10.250,5.000,0.000|FS:800,0>
     content = line.strip("<>")
     parts = content.split("|")
     state = parts[0]
@@ -155,6 +141,29 @@ def parse_status(line: str):
     return state, x, y, z, feed, spindle
 
 
+# ✅ THIS IS THE IMPORTANT NEW FUNCTION
+def process_grbl_line(conn: sqlite3.Connection, line: str) -> None:
+    line = line.strip()
+    if not line:
+        return
+
+    if line.lower().startswith("grbl"):
+        log_event(conn, "startup", "GRBL startup banner", line, category="system")
+
+    elif line == "ok":
+        log_event(conn, "ok", "Command acknowledged", line, category="system")
+
+    elif line.startswith("ALARM:"):
+        log_event(conn, "alarm", line, line, level="error", category="grbl", code="ALARM")
+
+    elif line.startswith("<") and line.endswith(">"):
+        state, x, y, z, feed, spindle = parse_status(line)
+        log_telemetry(conn, state, x, y, z, feed, spindle, line)
+
+    else:
+        log_event(conn, "raw", "Unclassified line", line, category="system")
+
+
 def main() -> None:
     if not LOG_PATH.exists():
         print("Could not find grbl_sample.log in this folder.")
@@ -163,38 +172,17 @@ def main() -> None:
     conn = sqlite3.connect(DB_PATH)
     try:
         init_db(conn)
-
         active_job_id = get_active_job_id(conn)
         print("Active job_id:", active_job_id)
 
         for raw in LOG_PATH.read_text(encoding="utf-8").splitlines():
-            line = raw.strip()
-            if not line:
-                continue
+            process_grbl_line(conn, raw)
 
-            if line.lower().startswith("grbl"):
-                log_event(conn, "startup", "GRBL startup banner", line, category="system")
-
-            elif line == "ok":
-                log_event(conn, "ok", "Command acknowledged", line, category="system")
-
-            elif line.startswith("ALARM:"):
-                # keep code as "ALARM" (simple), message contains the full string e.g. ALARM:1
-                log_event(conn, "alarm", line, line, level="error", category="grbl", code="ALARM")
-
-            elif line.startswith("<") and line.endswith(">"):
-                state, x, y, z, feed, spindle = parse_status(line)
-                log_telemetry(conn, state, x, y, z, feed, spindle, line)
-
-            else:
-                log_event(conn, "raw", "Unclassified line", line, category="system")
-
-        # Auto-finalize the active job based on telemetry timestamps
         if active_job_id is not None:
             finalize_job_from_telemetry(conn, active_job_id)
 
         conn.commit()
-        print("Done ✅ Logged to database:", DB_PATH.resolve())
+        print("Done Logged to database:", DB_PATH.resolve())
 
     finally:
         conn.close()
@@ -202,3 +190,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
