@@ -17,6 +17,19 @@ This project ingests GRBL-like telemetry logs, decodes machine state, stores tel
 - Generates a **job summary report**
 - Exports CSV files for reporting
 
+## What this project demonstrates
+
+- Industrial telemetry ingestion and decoding (GRBL-style machine data)  
+- State-based job lifecycle tracking (created → started → finished)  
+- Database schema design, versioning, and migrations (SQLite)  
+- OT/IT-style data pipelines for industrial equipment  
+- Automated job summaries and CSV-based reporting  
+- Clean separation between ingestion, storage, processing, and reporting logic
+
+## Motivation
+
+This project was built to develop practical experience in industrial automation and IIoT concepts, with a focus on bridging operational technology (OT) and information technology (IT). It serves as a hands-on learning platform to explore telemetry ingestion, machine state tracking, and data-driven monitoring for real-world industrial equipment.    
+
 ---
 
 ## Repo contents (main scripts)
